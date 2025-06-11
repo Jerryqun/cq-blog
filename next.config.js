@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { withContentlayer } = require('next-contentlayer2')
 
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
@@ -80,6 +81,7 @@ module.exports = () => {
         },
       ],
       unoptimized,
+      domains: ['wisdomhammer.oss-cn-hangzhou.aliyuncs.com'],
     },
     async headers() {
       return [
