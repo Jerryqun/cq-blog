@@ -99,5 +99,6 @@ module.exports = () => {
 
       return config
     },
+    distDir: 'dist',
   })
 }

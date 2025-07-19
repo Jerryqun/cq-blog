@@ -32,15 +32,16 @@
     "strictNullChecks": true
   },
   "include": [
-    "next-env.d.ts",
     "**/*.js",
+    "**/*.json",
     "**/*.mjs",
     "**/*.ts",
     "**/*.tsx",
-    "**/*.json",
     ".contentlayer/generated",
     ".contentlayer/generated/**/*.json",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    "dist/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }
