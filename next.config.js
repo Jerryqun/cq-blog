@@ -83,14 +83,15 @@ module.exports = () => {
       unoptimized,
       domains: ['wisdomhammer.oss-cn-hangzhou.aliyuncs.com'],
     },
-    async headers() {
-      return [
-        {
-          source: '/(.*)',
-          headers: securityHeaders,
-        },
-      ]
-    },
+    // async headers() {
+    //   return [
+    //     {
+    //       source: '/(.*)',
+    //       headers: securityHeaders,
+    //     },
+    //   ]
+    // },
+    // 在静态导出模式下，下一些 Next.js 功能（比如自定义 HTTP headers、自定义 rewrites/redirects、自定义 API 路由等）无法生效，因为这类功能依赖服务器中间件或 Node.js 运行时
     webpack: (config, options) => {
       config.module.rules.push({
         test: /\.svg$/,
