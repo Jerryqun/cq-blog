@@ -15,7 +15,7 @@ const projectsData: Project[] = [
   {
     title: 'React在线编辑器',
     description: `基于react17、antd4、monaco-editor实现的在线编辑器`,
-    imgSrc: '/static/images/time-machine.jpg',
+    imgSrc: '/static/images/react-editor.png',
     href: 'https://jerryqun.github.io/playground-react/#/~demos/docs-playground',
   },
 ]
