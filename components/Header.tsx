@@ -5,8 +5,8 @@ import Link from './Link'
 import MobileNav from './MobileNav'
 import ThemeSwitch from './ThemeSwitch'
 import SearchButton from './SearchButton'
-// import Imgage from '@/components/Image'
-import NextImage, { ImageProps } from 'next/image'
+import Imgage from '@/components/Image'
+// import NextImage, { ImageProps } from 'next/image'
 
 const Header = () => {
   let headerClass = 'flex items-center w-full bg-white dark:bg-gray-950 justify-between py-10'
@@ -19,7 +19,7 @@ const Header = () => {
       <Link href="/" aria-label={siteMetadata.headerTitle}>
         <div className="flex items-center justify-between">
           <div className="mr-3">
-            <NextImage
+            <Imgage
               width={50}
               height={50}
               className="rounded-4xl"
