@@ -2,7 +2,7 @@
 const siteMetadata = {
   title: 'cq | blog',
   author: 'cq',
-  headerTitle: 'cq的博客',
+  headerTitle: 'CQ',
   description: 'cq的博客、分享前端知识、个人管理、个人作品',
   language: 'zh-cn',
   theme: 'system', // system, dark or light
