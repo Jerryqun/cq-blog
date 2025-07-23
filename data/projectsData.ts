@@ -18,6 +18,12 @@ const projectsData: Project[] = [
     imgSrc: '/static/images/react-editor.png',
     href: 'https://jerryqun.github.io/playground-react/#/~demos/docs-playground',
   },
+  {
+    title: '个人知识积累',
+    description: `前端知识，工作中遇到的坑，个人知识积累`,
+    imgSrc: '/static/images/write.png',
+    href: 'https://jerryqun.github.io/bad-writing/',
+  },
 ]
 
 export default projectsData
