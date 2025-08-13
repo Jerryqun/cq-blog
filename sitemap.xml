@@ -2,19 +2,19 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/</loc>
-<lastmod>2025-07-23</lastmod>
+<lastmod>2025-08-13</lastmod>
 </url>
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/blog</loc>
-<lastmod>2025-07-23</lastmod>
+<lastmod>2025-08-13</lastmod>
 </url>
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/projects</loc>
-<lastmod>2025-07-23</lastmod>
+<lastmod>2025-08-13</lastmod>
 </url>
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/tags</loc>
-<lastmod>2025-07-23</lastmod>
+<lastmod>2025-08-13</lastmod>
 </url>
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/blog/code-sample</loc>
@@ -55,6 +55,10 @@
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/blog/the-time-machine</loc>
 <lastmod>2018-08-15T00:00:00.000Z</lastmod>
+</url>
+<url>
+<loc>https://tailwind-nextjs-starter-blog.vercel.app/blog/video</loc>
+<lastmod>2025-08-01T00:00:00.000Z</lastmod>
 </url>
 <url>
 <loc>https://tailwind-nextjs-starter-blog.vercel.app/blog/nested-route/introducing-multi-part-posts-with-nested-routing</loc>
