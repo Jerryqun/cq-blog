@@ -6,7 +6,7 @@ import Link from './Link'
 import MobileNav from './MobileNav'
 import ThemeSwitch from './ThemeSwitch'
 import SearchButton from './SearchButton'
-import Imgage from '@/components/Image'
+import Image from '@/components/Image'
 import { usePathname } from 'next/navigation'
 
 const Header = () => {
@@ -21,7 +21,7 @@ const Header = () => {
       <Link href="/" aria-label={siteMetadata.headerTitle}>
         <div className="flex items-center justify-between">
           <div className="mr-3">
-            <Imgage
+            <Image
               width={50}
               height={50}
               className="rounded-4xl"

@@ -1,20 +1,27 @@
 'use client'
 
 import siteMetadata from '@/data/siteMetadata'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const ScrollTopAndComment = () => {
   const [show, setShow] = useState(false)
+  const rafIdRef = useRef<number>(0)
+
+  const handleWindowScroll = useCallback(() => {
+    if (rafIdRef.current) return
+    rafIdRef.current = requestAnimationFrame(() => {
+      setShow(window.scrollY > 50)
+      rafIdRef.current = 0
+    })
+  }, [])
 
   useEffect(() => {
-    const handleWindowScroll = () => {
-      if (window.scrollY > 50) setShow(true)
-      else setShow(false)
+    window.addEventListener('scroll', handleWindowScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleWindowScroll)
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
     }
-
-    window.addEventListener('scroll', handleWindowScroll)
-    return () => window.removeEventListener('scroll', handleWindowScroll)
-  }, [])
+  }, [handleWindowScroll])
 
   const handleScrollTop = () => {
     window.scrollTo({ top: 0 })

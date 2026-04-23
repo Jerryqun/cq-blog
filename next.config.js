@@ -74,14 +74,17 @@ module.exports = () => {
       dirs: ['app', 'components', 'layouts', 'scripts'],
     },
     images: {
+      unoptimized,
       remotePatterns: [
         {
           protocol: 'https',
           hostname: 'picsum.photos',
         },
+        {
+          protocol: 'https',
+          hostname: 'wisdomhammer.oss-cn-hangzhou.aliyuncs.com',
+        },
       ],
-      unoptimized,
-      domains: ['wisdomhammer.oss-cn-hangzhou.aliyuncs.com'],
     },
     // async headers() {
     //   return [
