@@ -1,0 +1,408 @@
+---
+title: '前端工程师的 Prompt Engineering 实战指南'
+date: '2025-05-28'
+tags: ['AI', 'Prompt Engineering']
+draft: false
+summary: 'Prompt 不是"许愿"，而是"编程"。本文从前端工程师视角，系统讲解 Prompt Engineering 的核心技巧：结构化 Prompt、Few-shot 学习、思维链、输出格式控制，以及如何在代码中工程化管理 Prompt。'
+---
+
+## Prompt Engineering 不是玄学
+
+很多开发者对 Prompt 的理解停留在"写一段话让 AI 回答"。但当你真正在产品中使用 LLM 时，你会发现：**Prompt 的质量直接决定了产品的好坏**。
+
+同样一个需求，不同的 Prompt 写法可能导致结果天差地别。Prompt Engineering 本质上是**用自然语言编程**——你需要精确地描述输入、输出、规则和约束。
+
+## 核心原则
+
+### 1. 结构化优于自然语言
+
+不要写一大段散文式的 prompt，用结构化的方式组织：
+
+```text
+# ❌ 不好：模糊的散文式 prompt
+帮我写一个 React 组件，是一个表单，要有用户名和密码输入框，要好看，用 Tailwind。
+
+# ✅ 好：结构化 prompt
+## 角色
+你是一个资深 React + TypeScript 前端工程师。
+
+## 任务
+创建一个登录表单组件。
+
+## 要求
+- 使用 React + TypeScript
+- 使用 Tailwind CSS 样式
+- 包含用户名和密码两个输入框
+- 包含登录按钮，点击时触发 onSubmit 回调
+- 表单验证：用户名非空，密码至少8位
+- 错误提示显示在输入框下方
+
+## 输出格式
+只输出组件代码，不要解释。
+```
+
+### 2. 明确约束边界
+
+LLM 喜欢"自由发挥"，必须明确告诉它什么该做、什么不该做：
+
+```text
+## 规则
+- 只使用函数式组件，不要用 class 组件
+- 不要使用 any 类型
+- 不要引入额外的第三方库
+- 代码必须有完整类型定义
+```
+
+### 3. 给定输出格式
+
+如果你需要在代码中解析 LLM 的输出，必须严格指定格式。JSON 是最常用的：
+
+```text
+## 输出格式
+以 JSON 格式返回，不要包含 markdown 代码块标记，结构如下：
+{
+  "componentName": "组件名",
+  "code": "完整代码",
+  "explanation": "简要说明"
+}
+```
+
+在代码中配合 JSON Mode 或 Structured Output 使用效果更好：
+
+```typescript
+import { openai } from '@ai-sdk/openai'
+import { generateObject } from 'ai'
+import { z } from 'zod'
+
+const { object } = await generateObject({
+  model: openai('gpt-4o'),
+  schema: z.object({
+    componentName: z.string(),
+    code: z.string(),
+    explanation: z.string(),
+  }),
+  prompt: `创建一个登录表单组件...`,
+})
+
+// object 已经是类型安全的对象，无需手动解析 JSON
+console.log(object.componentName)
+console.log(object.code)
+```
+
+## Few-shot Learning：用示例教 AI
+
+对于复杂任务，给几个示例比写一堆规则更有效：
+
+```text
+## 任务
+将用户的自然语言转换为数据库查询条件。
+
+## 示例
+
+输入: "找出所有价格超过100的商品"
+输出: { "field": "price", "operator": ">", "value": 100 }
+
+输入: "名字包含张的用户"
+输出: { "field": "name", "operator": "like", "value": "%张%" }
+
+输入: "最近7天注册的用户"
+输出: { "field": "createdAt", "operator": ">=", "value": "now() - interval '7 days'" }
+
+## 现在处理
+输入: "库存小于10的电子产品"
+输出:
+```
+
+在代码中管理 few-shot 示例：
+
+```typescript
+const buildPrompt = (userInput: string) => `
+将用户的自然语言转换为数据库查询条件。
+
+## 示例
+${EXAMPLES.map((ex) => `输入: "${ex.input}"\n输出: ${JSON.stringify(ex.output)}`).join('\n\n')}
+
+## 现在处理
+输入: "${userInput}"
+输出:
+`
+
+// 示例库可以存在数据库中，方便后续扩充
+const EXAMPLES = [
+  { input: '找出所有价格超过100的商品', output: { field: 'price', operator: '>', value: 100 } },
+  { input: '名字包含张的用户', output: { field: 'name', operator: 'like', value: '%张%' } },
+]
+```
+
+> [!IMPORTANT]
+> Few-shot 示例的选择比数量更重要。3 个高质量、覆盖不同场景的示例，效果远好于 10 个相似的示例。实际项目中我维护了一个"困难案例库"，专门收集模型回答错误的案例作为 few-shot 示例。
+
+## Chain of Thought：让 AI "想"再答
+
+对于复杂推理任务，让 LLM 先输出推理过程再给结论，准确率会显著提升：
+
+```text
+## 任务
+分析以下代码的 bug 并给出修复方案。
+
+## 要求
+按以下步骤思考：
+1. 首先理解代码的功能意图
+2. 逐行检查可能的 bug
+3. 分析每个 bug 的影响
+4. 给出修复方案
+
+请先在 <thinking> 标签中展示你的分析过程，然后在 <answer> 标签中给出最终方案。
+
+## 代码
+${code}
+```
+
+在代码中解析思维链输出：
+
+```typescript
+function parseThinkingResponse(response: string) {
+  const thinkingMatch = response.match(/<thinking>([\s\S]*?)<\/thinking>/)
+  const answerMatch = response.match(/<answer>([\s\S]*?)<\/answer>/)
+
+  return {
+    thinking: thinkingMatch ? thinkingMatch[1].trim() : '',
+    answer: answerMatch ? answerMatch[1].trim() : response,
+  }
+}
+```
+
+不过 OpenAI 的 o1/o3 系列模型已经内置了思维链能力，不需要手动引导。对于 GPT-4o 等模型，这个技巧仍然有用。
+
+## 工程化管理 Prompt
+
+在真实项目中，Prompt 散落在代码各处是维护噩梦。推荐用以下方式管理：
+
+### 1. Prompt 模板化
+
+```typescript
+// prompts/templates.ts
+
+export const PROMPTS = {
+  codeReview: {
+    system: `你是一个资深代码审查专家。
+## 审查标准
+- 代码正确性：逻辑错误、边界条件
+- 安全性：XSS、SQL注入、敏感信息泄露
+- 性能：不必要的重渲染、内存泄漏
+- 可读性：命名规范、注释完整性
+## 输出格式
+以 JSON 返回：
+{ "issues": [{ "severity": "high|medium|low", "line": number, "type": "string", "description": "string", "suggestion": "string" }] }`,
+
+    user: (code: string, language: string) =>
+      `审查以下 ${language} 代码：\n\n\`\`\`${language}\n${code}\n\`\`\``,
+  },
+
+  generateComponent: {
+    system: `你是一个 React + TypeScript 前端工程师。只输出代码，不解释。`,
+    user: (description: string) =>
+      `创建一个 React 组件，要求：\n${description}\n\n使用函数式组件 + TypeScript + Tailwind CSS。`,
+  },
+
+  summarize: {
+    system: `你是一个技术文档摘要生成器。摘要要简洁、准确、包含关键信息。`,
+    user: (content: string, maxLength: number = 200) =>
+      `将以下内容总结为不超过 ${maxLength} 字的摘要：\n\n${content}`,
+  },
+} as const
+```
+
+### 2. Prompt 版本管理
+
+Prompt 也是代码，需要版本管理。推荐把 Prompt 模板放在单独文件中，配合 Git 管理：
+
+```typescript
+// prompts/v2/codeReview.ts
+export const codeReviewPromptV2 = {
+  version: '2.0',
+  system: `...`, // 优化后的 prompt
+  changelog: '增加了安全审查维度，优化了输出格式',
+}
+```
+
+### 3. A/B 测试 Prompt
+
+不同 Prompt 版本之间做 A/B 测试，量化对比效果：
+
+```typescript
+async function abTestPrompt(
+  promptA: string,
+  promptB: string,
+  testCases: { input: string; expected: string }[]
+) {
+  const results = { A: 0, B: 0 }
+
+  for (const testCase of testCases) {
+    const [resultA, resultB] = await Promise.all([
+      callLLM(promptA, testCase.input),
+      callLLM(promptB, testCase.input),
+    ])
+
+    // 用另一个 LLM 做裁判评分
+    const judge = await callLLM(
+      '你是一个评分裁判。比较两个回答哪个更接近标准答案。',
+      `问题: ${testCase.input}\n标准答案: ${testCase.expected}\n回答A: ${resultA}\n回答B: ${resultB}\n\n输出 A 或 B：`
+    )
+
+    if (judge.trim().startsWith('A')) results.A++
+    else results.B++
+  }
+
+  console.log(`A: ${results.A} vs B: ${results.B}`)
+}
+```
+
+## 实战案例：智能代码生成
+
+结合前面所有技巧，实现一个"描述需求生成组件"的功能：
+
+```typescript
+// lib/component-generator.ts
+import { openai } from '@ai-sdk/openai'
+import { generateObject } from 'ai'
+import { z } from 'zod'
+
+const SYSTEM_PROMPT = `你是一个资深 React + TypeScript 前端工程师。
+
+## 技术栈
+- React 18+ (函数式组件 + Hooks)
+- TypeScript 5+
+- Tailwind CSS
+- lucide-react 图标库
+
+## 编码规范
+- 组件名使用 PascalCase
+- Props 接口以 ${'{ComponentName}Props'} 命名
+- 使用 forwardRef 暴露 ref
+- 事件处理器以 handle 开头
+- 不使用 any 类型
+
+## Few-shot 示例
+输入: "一个带删除确认的按钮"
+输出: 
+${'```tsx'}
+import { useState } from 'react'
+import { Trash2 } from 'lucide-react'
+import { forwardRef } from 'react'
+
+interface DeleteButtonProps {
+  onDelete: () => void
+  label?: string
+}
+
+export const DeleteButton = forwardRef<HTMLButtonElement, DeleteButtonProps>(
+  ({ onDelete, label = '删除' }, ref) => {
+    const [confirming, setConfirming] = useState(false)
+
+    const handleDelete = () => {
+      if (!confirming) {
+        setConfirming(true)
+        setTimeout(() => setConfirming(false), 3000)
+        return
+      }
+      onDelete()
+      setConfirming(false)
+    }
+
+    return (
+      <button
+        ref={ref}
+        onClick={handleDelete}
+        className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors
+          ${confirming ? 'bg-red-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+      >
+        <Trash2 size={16} />
+        {confirming ? '确认删除？' : label}
+      </button>
+    )
+  }
+)
+DeleteButton.displayName = 'DeleteButton'
+${'```'}
+`
+
+export async function generateComponent(description: string) {
+  const { object } = await generateObject({
+    model: openai('gpt-4o'),
+    schema: z.object({
+      componentName: z.string().describe('组件名称'),
+      code: z.string().describe('完整组件代码'),
+      usage: z.string().describe('使用示例'),
+    }),
+    system: SYSTEM_PROMPT,
+    prompt: `生成一个组件：${description}`,
+    temperature: 0.2, // 代码生成用低温度保证稳定性
+  })
+
+  return object
+}
+```
+
+## 调试技巧
+
+### 1. 让 LLM 解释自己的推理
+
+当输出不符合预期时，让 LLM 解释它的思考过程：
+
+```typescript
+const debugPrompt = `
+你之前的回答是: "${previousAnswer}"
+用户的问题是: "${userQuestion}"
+
+请解释你为什么这样回答。你的推理过程是什么？
+`
+```
+
+### 2. 反向工程：从好结果推导 Prompt
+
+如果你手动得到了满意的结果，让 LLM 帮你反推 Prompt：
+
+```text
+我期望的输出是：
+${goodExample}
+
+请帮我写一个 prompt，让 AI 能稳定地生成类似格式的输出。
+```
+
+### 3. 日志记录与回放
+
+记录每次调用的完整 prompt 和响应，方便调试和改进：
+
+```typescript
+async function callWithLogging(prompt: string, model: string) {
+  const start = Date.now()
+  const response = await callLLM(prompt, model)
+  const duration = Date.now() - start
+
+  // 记录到日志系统
+  logger.info({
+    model,
+    promptLength: prompt.length,
+    responseLength: response.length,
+    duration,
+    prompt: prompt.slice(0, 500), // 截断存储
+    response: response.slice(0, 500),
+  })
+
+  return response
+}
+```
+
+## 总结
+
+Prompt Engineering 是 AI 时代前端开发者的必备技能。核心要点：
+
+1. **结构化思维**：用"角色 + 任务 + 规则 + 格式"的结构组织 Prompt
+2. **Few-shot 学习**：用高质量示例代替冗长描述
+3. **思维链**：复杂任务让 AI 先推理再回答
+4. **工程化管理**：模板化、版本管理、A/B 测试
+5. **输出控制**：用 Structured Output + Zod 保证类型安全
+6. **持续迭代**：记录日志，收集 bad case，不断优化
+
+Prompt 优化是一个持续过程。不要指望一次写好，要像调代码一样不断测试、迭代、改进。建立一套可量化评估的流程，才能让 Prompt 工程真正落地。

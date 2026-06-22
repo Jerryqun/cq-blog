@@ -8,15 +8,17 @@ import headerNavLinks from '@/data/headerNavLinks'
 
 const MobileNav = () => {
   const [navShow, setNavShow] = useState(false)
-  const navRef = useRef(null)
+  const navRef = useRef<HTMLElement>(null)
 
   const onToggleNav = () => {
     setNavShow((status) => {
-      if (status) {
-        enableBodyScroll(navRef.current)
-      } else {
-        // Prevent scrolling
-        disableBodyScroll(navRef.current)
+      if (navRef.current) {
+        if (status) {
+          enableBodyScroll(navRef.current)
+        } else {
+          // Prevent scrolling
+          disableBodyScroll(navRef.current)
+        }
       }
       return !status
     })

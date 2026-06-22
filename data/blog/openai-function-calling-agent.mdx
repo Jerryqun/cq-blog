@@ -1,0 +1,393 @@
+---
+title: '用 OpenAI Function Calling 构建智能 AI 助手实战'
+date: '2025-06-10'
+tags: ['AI', 'OpenAI', 'Function Calling']
+draft: false
+summary: 'Function Calling 是让 LLM 从"只会说"变成"能做事"的关键能力。本文从前端工程师视角，讲解如何用 Function Calling 构建一个能查天气、查订单、操作数据库的智能助手，并分享多轮工具调用、并行执行、错误处理的工程实践。'
+---
+
+## 为什么需要 Function Calling
+
+大语言模型很强，但它有一个致命缺陷：**它只会生成文本，不能执行动作**。你问它"今天北京天气怎么样"，它只能根据训练数据猜，或者干脆告诉你它不知道。
+
+Function Calling 解决了这个问题——它让 LLM 能够"调用"你预定义的函数，获取真实数据后再组织回答。这本质上就是给 AI 装上了"手脚"。
+
+## Function Calling 的工作原理
+
+整个流程可以概括为四步：
+
+```
+用户提问 → LLM 判断需要调用哪个函数 → 执行函数获取结果 → LLM 根据结果生成最终回答
+```
+
+关键点在于：**LLM 本身不执行函数，它只是告诉你"应该调用哪个函数、传什么参数"**。真正的执行逻辑在你的代码里。
+
+## 基础实现：一个天气助手
+
+### 定义工具函数
+
+```typescript
+// tools/weather.ts
+import { z } from 'zod'
+
+// 用 Zod 定义参数 schema，LLM 会根据这个 schema 来生成参数
+export const weatherTool = {
+  type: 'function' as const,
+  function: {
+    name: 'get_weather',
+    description: '获取指定城市的当前天气信息',
+    parameters: z.object({
+      city: z.string().describe('城市名称，如"北京"、"上海"'),
+      unit: z.enum(['celsius', 'fahrenheit']).optional().describe('温度单位，默认摄氏度'),
+    }),
+  },
+}
+
+// 实际的执行函数
+export async function getWeather({ city, unit = 'celsius' }: { city: string; unit?: string }) {
+  // 实际项目中这里调用真实天气 API
+  const mockData: Record<string, any> = {
+    北京: { temp: 25, condition: '晴', humidity: 40 },
+    上海: { temp: 28, condition: '多云', humidity: 65 },
+  }
+
+  const data = mockData[city]
+  if (!data) {
+    return { error: `暂不支持查询 ${city} 的天气` }
+  }
+
+  return {
+    city,
+    temperature: unit === 'fahrenheit' ? data.temp * 9 / 5 + 32 : data.temp,
+    unit: unit === 'fahrenheit' ? '°F' : '°C',
+    condition: data.condition,
+    humidity: data.humidity,
+  }
+}
+```
+
+### 实现 Agent 循环
+
+```typescript
+// lib/agent.ts
+import OpenAI from 'openai'
+import { weatherTool, getWeather } from './tools/weather'
+
+const openai = new OpenAI()
+
+// 工具注册表：name → 执行函数
+const toolExecutors: Record<string, (args: any) => Promise<any>> = {
+  get_weather: getWeather,
+}
+
+// 工具定义列表
+const tools = [weatherTool]
+
+export async function runAgent(userMessage: string) {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: '你是一个智能助手，可以帮用户查询天气。当用户询问天气时，务必调用 get_weather 函数获取实时数据，不要编造信息。',
+    },
+    { role: 'user', content: userMessage },
+  ]
+
+  // Agent 循环：LLM 可能需要多轮工具调用
+  while (true) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages,
+      tools: tools.map((t) => ({
+        type: t.type,
+        function: {
+          name: t.function.name,
+          description: t.function.description,
+          // 将 Zod schema 转为 JSON Schema
+          parameters: zodToJsonSchema(t.function.parameters),
+        },
+      })),
+    })
+
+    const message = response.choices[0].message
+    messages.push(message)
+
+    // 如果没有工具调用，说明 LLM 已经生成最终回答
+    if (!message.tool_calls) {
+      return message.content
+    }
+
+    // 执行所有工具调用
+    for (const toolCall of message.tool_calls) {
+      const functionName = toolCall.function.name
+      const args = JSON.parse(toolCall.function.arguments)
+
+      console.log(`调用工具: ${functionName}，参数:`, args)
+
+      const executor = toolExecutors[functionName]
+      if (!executor) {
+        throw new Error(`未知的工具: ${functionName}`)
+      }
+
+      const result = await executor(args)
+
+      // 将工具执行结果加入对话
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(result),
+      })
+    }
+
+    // 循环继续，让 LLM 看到工具结果后生成回答（或决定继续调用工具）
+  }
+}
+
+// Zod 转 JSON Schema 的辅助函数
+function zodToJsonSchema(schema: z.ZodTypeAny): any {
+  // 实际项目中可以用 zod-to-json-schema 库
+  // 这里简化处理
+  return zodToJsonSchemaSimple(schema)
+}
+```
+
+### 在 Next.js 中使用
+
+```typescript
+// app/api/agent/route.ts
+import { runAgent } from '@/lib/agent'
+
+export async function POST(req: Request) {
+  const { message } = await req.json()
+
+  try {
+    const reply = await runAgent(message)
+    return Response.json({ reply })
+  } catch (error) {
+    console.error('Agent 执行失败:', error)
+    return Response.json({ error: '处理失败，请重试' }, { status: 500 })
+  }
+}
+```
+
+## 进阶：多工具与并行调用
+
+实际应用中，助手通常需要多个工具。比如一个电商客服助手需要查订单、查物流、查库存：
+
+```typescript
+// tools/ecommerce.ts
+export const orderTool = {
+  type: 'function' as const,
+  function: {
+    name: 'query_order',
+    description: '根据订单号查询订单状态和物流信息',
+    parameters: z.object({
+      orderId: z.string().describe('订单编号'),
+    }),
+  },
+}
+
+export const inventoryTool = {
+  type: 'function' as const,
+  function: {
+    name: 'check_inventory',
+    description: '查询商品库存数量',
+    parameters: z.object({
+      productId: z.string().describe('商品ID'),
+    }),
+  },
+}
+
+export const refundTool = {
+  type: 'function' as const,
+  function: {
+    name: 'request_refund',
+    description: '发起退款申请',
+    parameters: z.object({
+      orderId: z.string().describe('订单编号'),
+      reason: z.string().describe('退款原因'),
+      amount: z.number().optional().describe('退款金额，不填则全额退款'),
+    }),
+  },
+}
+```
+
+OpenAI 支持**并行工具调用**——当用户问"帮我查下订单 A 的状态，顺便看看商品 B 还有没有库存"时，LLM 会同时返回两个 tool_call。我们可以并行执行：
+
+```typescript
+// 并行执行工具调用
+const toolResults = await Promise.all(
+  message.tool_calls.map(async (toolCall) => {
+    const executor = toolExecutors[toolCall.function.name]
+    const args = JSON.parse(toolCall.function.arguments)
+
+    try {
+      const result = await executor(args)
+      return {
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(result),
+      }
+    } catch (error) {
+      // 单个工具失败不影响其他工具
+      return {
+        tool_call_id: toolCall.id,
+        content: JSON.stringify({ error: `工具执行失败: ${error.message}` }),
+      }
+    }
+  })
+)
+
+// 将所有结果一次性加入对话
+toolResults.forEach((result) => {
+  messages.push({ role: 'tool', ...result })
+})
+```
+
+## 权限控制：不同场景不同权限
+
+退款这类操作有风险，不能让 AI 随便执行。实际项目中需要加入权限校验：
+
+```typescript
+type ToolContext = {
+  userId: string
+  userRole: 'customer' | 'admin'
+}
+
+// 带权限校验的工具执行器
+const toolExecutors = {
+  query_order: async (args, ctx: ToolContext) => {
+    const order = await getOrder(args.orderId)
+    // 只能查自己的订单
+    if (order.userId !== ctx.userId && ctx.userRole !== 'admin') {
+      return { error: '无权查看此订单' }
+    }
+    return order
+  },
+
+  request_refund: async (args, ctx: ToolContext) => {
+    const order = await getOrder(args.orderId)
+    if (order.userId !== ctx.userId) {
+      return { error: '只能对自己的订单申请退款' }
+    }
+    if (order.status !== 'completed') {
+      return { error: `当前订单状态（${order.status}）不支持退款` }
+    }
+    return await processRefund(args)
+  },
+}
+
+// 在 Agent 中传入上下文
+export async function runAgent(userMessage: string, ctx: ToolContext) {
+  // ... 调用时传入 ctx
+  const result = await toolExecutors[functionName](args, ctx)
+}
+```
+
+## 流式输出工具调用过程
+
+用户体验上，工具调用期间应该有实时反馈。用 Vercel AI SDK 可以很优雅地实现：
+
+```typescript
+import { streamText, tool } from 'ai'
+import { z } from 'zod'
+import { openai } from '@ai-sdk/openai'
+
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    tools: {
+      get_weather: tool({
+        description: '获取指定城市的天气',
+        parameters: z.object({
+          city: z.string().describe('城市名称'),
+        }),
+        execute: async ({ city }) => {
+          return await getWeather({ city })
+        },
+      }),
+      query_order: tool({
+        description: '查询订单状态',
+        parameters: z.object({
+          orderId: z.string(),
+        }),
+        execute: async ({ orderId }, { messages }) => {
+          // 可以在 execute 中访问到当前对话历史
+          return await queryOrder(orderId)
+        },
+      }),
+    },
+    maxSteps: 5, // 最多允许5轮工具调用，防止死循环
+  })
+
+  return result.toDataStreamResponse()
+}
+```
+
+前端通过 `useChat` 的 `onToolCall` 回调可以感知到工具调用过程：
+
+```tsx
+const { messages } = useChat({
+  onToolCall: ({ toolCall }) => {
+    // 实时显示"正在查询天气..."等状态
+    if (toolCall.toolName === 'get_weather') {
+      setStatus(`正在查询 ${toolCall.args.city} 的天气...`)
+    }
+  },
+})
+```
+
+## 常见踩坑记录
+
+### 1. 参数校验不严格导致 LLM 乱传参
+
+LLM 生成的参数不一定符合预期，必须用 Zod 做运行时校验：
+
+```typescript
+execute: async (args) => {
+  // Zod 会自动校验，不通过会抛错
+  // 但最好手动 catch 并返回友好提示
+  try {
+    const validated = schema.parse(args)
+    return await doSomething(validated)
+  } catch (error) {
+    return { error: '参数格式不正确' }
+  }
+}
+```
+
+### 2. 死循环：LLM 反复调用同一工具
+
+设置 `maxSteps` 限制最大调用轮次。同时在 system prompt 中明确告知工具的使用边界：
+
+```
+你是一个助手。请注意：
+- 查询天气时使用 get_weather 函数
+- 如果函数返回了 error 字段，不要反复重试，直接告诉用户原因
+- 每个工具在一次对话中最多调用3次
+```
+
+### 3. 工具描述写得不好导致 LLM 不会调用
+
+工具的 `description` 是 LLM 决定是否调用的唯一依据。描述要清晰、包含使用场景：
+
+```typescript
+// ❌ 不好的描述
+description: '查询数据'
+
+// ✅ 好的描述
+description: '根据订单号查询订单的详细状态，包括支付状态、物流进度、商品明细。当用户询问"我的订单到哪了"、"订单状态"等问题时使用此工具。'
+```
+
+## 总结
+
+Function Calling 是构建 AI Agent 的基石。核心要点：
+
+1. **LLM 只负责决策**：判断调用哪个函数、传什么参数，真正的执行在你的代码里
+2. **Agent 循环**：工具调用可能需要多轮，要设置最大轮次防止死循环
+3. **并行执行**：多个工具调用可以并行处理，提升响应速度
+4. **权限控制**：危险操作必须校验用户身份和业务状态
+5. **参数校验**：永远不要信任 LLM 生成的参数，用 Zod 兜底
+
+掌握了 Function Calling，你就具备了构建各种 AI Agent 的能力——客服机器人、数据分析助手、自动化运维工具，本质都是"LLM 做决策 + 函数做执行"的组合。

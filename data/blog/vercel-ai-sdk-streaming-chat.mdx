@@ -1,0 +1,398 @@
+---
+title: '基于 Vercel AI SDK 构建流式 AI 聊天应用实战'
+date: '2025-06-18'
+tags: ['AI', 'Next.js', 'Vercel AI SDK']
+draft: false
+summary: '从零到一搭建一个支持流式响应的 AI 聊天应用。涵盖 Vercel AI SDK 的核心概念、流式渲染原理、多轮对话上下文管理、错误处理与重试机制，以及生产环境下的工程实践。'
+---
+
+## 前言
+
+在 AI 应用爆发的当下，前端开发者面临一个现实问题：如何快速、稳定地接入大语言模型？直接用 `fetch` 调 OpenAI API 固然可以，但流式渲染、上下文管理、错误重试这些细节处理起来相当繁琐。Vercel AI SDK 正是为解决这个问题而生的一套工程化方案。
+
+本文记录我在实际项目中使用 Vercel AI SDK 构建流式聊天应用的全过程，包括踩过的坑和最终落地的方案。
+
+## 为什么选择 Vercel AI SDK
+
+在选型阶段我对比了几个方案：
+
+| 方案 | 优点 | 缺点 |
+|------|------|------|
+| 直接 fetch 调用 | 零依赖，完全可控 | 流式处理、错误重试需自己实现 |
+| LangChain.js | 生态丰富，链式调用 | 学习曲线陡，包体积大 |
+| Vercel AI SDK | 开箱即用的流式支持，与 Next.js 深度集成 | 强绑定 Vercel 生态（但有独立运行能力） |
+
+最终选择 Vercel AI SDK 的核心原因是它对**流式响应**的处理极其优雅，几行代码就能实现打字机效果，且与 Next.js App Router 的 Server Actions 配合得天衣无缝。
+
+## 核心概念
+
+Vercel AI SDK 分为三个层次：
+
+- **AI SDK Core**：统一的多模型调用接口，支持 OpenAI、Anthropic、Google 等
+- **AI SDK UI**：React/Vue/Svelte 的 UI Hooks，如 `useChat`、`useCompletion`
+- **AI SDK RSC**：基于 React Server Components 的 AI 渲染能力
+
+对于聊天应用，我们主要用到 Core 和 UI 两层。
+
+## 项目搭建
+
+### 安装依赖
+
+```bash
+npm install ai @ai-sdk/openai zod
+```
+
+`@ai-sdk/openai` 是 OpenAI 的 provider 适配器，`zod` 用于结构化输出的 schema 校验。
+
+### 环境变量配置
+
+```bash
+# .env.local
+OPENAI_API_KEY=sk-xxx
+```
+
+## 实现流式聊天 API
+
+### 服务端：流式路由
+
+在 `app/api/chat/route.ts` 中创建流式接口：
+
+```typescript
+import { openai } from '@ai-sdk/openai'
+import { streamText, convertToCoreMessages } from 'ai'
+
+export const runtime = 'edge' // 使用 Edge Runtime 获得更低延迟
+
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages: convertToCoreMessages(messages),
+    system: '你是一个专业的前端开发助手，回答要简洁准确，代码示例要完整可运行。',
+    temperature: 0.7,
+    maxTokens: 2000,
+  })
+
+  return result.toDataStreamResponse()
+}
+```
+
+这里有几个关键点：
+
+1. **`runtime = 'edge'`**：Edge Runtime 没有 Node.js 的完整 API，但延迟更低，适合流式场景。如果你的依赖需要 Node API，去掉这行即可
+2. **`convertToCoreMessages`**：将前端的 UI 消息格式转换为 SDK 内部的核心消息格式，自动处理 role 和 content
+3. **`toDataStreamResponse()`**：将流式结果转为标准的 SSE（Server-Sent Events）响应
+
+### 客户端：聊天界面
+
+```tsx
+'use client'
+
+import { useChat } from 'ai/react'
+import { useRef, useEffect } from 'react'
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, stop } = useChat({
+    api: '/api/chat',
+    onError: (err) => {
+      console.error('聊天出错:', err)
+    },
+  })
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
+
+  return (
+    <div className="flex h-screen flex-col">
+      {/* 消息列表 */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                message.role === 'user'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-900'
+              }`}
+            >
+              <div className="whitespace-pre-wrap">{message.content}</div>
+            </div>
+          </div>
+        ))}
+        {/* 加载指示器 */}
+        {isLoading && messages[messages.length - 1]?.role === 'user' && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 rounded-lg px-4 py-2">
+              <span className="animate-pulse">思考中...</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 输入区域 */}
+      <form onSubmit={handleSubmit} className="border-t p-4 flex gap-2">
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="输入消息..."
+          className="flex-1 rounded-lg border px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="submit"
+          disabled={isLoading || !input.trim()}
+          className="rounded-lg bg-blue-500 px-6 py-2 text-white disabled:opacity-50"
+        >
+          发送
+        </button>
+        {isLoading && (
+          <button
+            type="button"
+            onClick={stop}
+            className="rounded-lg bg-red-500 px-4 py-2 text-white"
+          >
+            停止
+          </button>
+        )}
+      </form>
+    </div>
+  )
+}
+```
+
+`useChat` Hook 帮我们处理了所有脏活累活：消息状态管理、流式数据接收、输入处理、提交逻辑。我们只需关注 UI 渲染。
+
+## 多轮对话上下文管理
+
+默认情况下，`useChat` 会把所有历史消息发给后端，这在长对话中会导致 Token 超限。实际项目中需要做截断处理：
+
+```typescript
+// app/api/chat/route.ts
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+
+  // 保留 system 消息 + 最近 10 轮对话
+  const systemMessages = messages.filter((m: any) => m.role === 'system')
+  const conversationMessages = messages.filter((m: any) => m.role !== 'system')
+  const recentMessages = conversationMessages.slice(-20) // 最近20条消息（约10轮对话）
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages: convertToCoreMessages([...systemMessages, ...recentMessages]),
+  })
+
+  return result.toDataStreamResponse()
+}
+```
+
+更进阶的做法是用 **摘要压缩**：当历史消息超过阈值时，用一次 LLM 调用把旧消息总结成一段摘要，再拼接到最新对话前面。
+
+## 错误处理与重试机制
+
+生产环境中 AI 接口不稳定是常态，必须做好容错：
+
+```typescript
+// app/api/chat/route.ts
+import { streamText } from 'ai'
+
+const MAX_RETRIES = 3
+
+async function callAI(messages: any[], retryCount = 0) {
+  try {
+    const result = streamText({
+      model: openai('gpt-4o'),
+      messages,
+    })
+    return result.toDataStreamResponse()
+  } catch (error) {
+    if (retryCount < MAX_RETRIES) {
+      // 指数退避重试
+      const delay = Math.pow(2, retryCount) * 1000
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return callAI(messages, retryCount + 1)
+    }
+    throw error
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { messages } = await req.json()
+    return await callAI(convertToCoreMessages(messages))
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: 'AI 服务暂时不可用，请稍后重试' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+}
+```
+
+客户端也要处理流中断的情况——用户可能在流式输出过程中刷新页面或断网：
+
+```tsx
+const { messages, error, reload } = useChat({
+  api: '/api/chat',
+  onFinish: (message) => {
+    // 持久化到本地存储
+    localStorage.setItem('chat-history', JSON.stringify(messages))
+  },
+})
+
+// 错误时显示重试按钮
+{error && (
+  <div className="text-center">
+    <p className="text-red-500">{error.message}</p>
+    <button onClick={() => reload()} className="mt-2 text-blue-500 underline">
+      重新生成
+    </button>
+  </div>
+)}
+```
+
+## Markdown 渲染
+
+AI 返回的内容通常包含 Markdown，需要在前端渲染。推荐用 `react-markdown` + `remark-gfm`：
+
+```tsx
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+
+function MarkdownRenderer({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code({ node, className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || '')
+          const isInline = !match && !className
+          return isInline ? (
+            <code className="bg-gray-200 rounded px-1 py-0.5 text-sm" {...props}>
+              {children}
+            </code>
+          ) : (
+            <SyntaxHighlighter
+              language={match ? match[1] : 'text'}
+              PreTag="div"
+              {...props}
+            >
+              {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
+          )
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+```
+
+> [!WARNING]
+> 流式输出时 Markdown 可能处于不完整状态（比如代码块只写了一半），渲染器需要能优雅处理这种情况。`react-markdown` 本身对此有较好的容错，但自定义组件中要注意防御性编程。
+
+## 性能优化实践
+
+### 1. 虚拟滚动处理长对话
+
+对话超过几百条时，DOM 节点过多会导致卡顿。用 `@tanstack/react-virtual` 做虚拟滚动：
+
+```tsx
+import { useVirtualizer } from '@tanstack/react-virtual'
+
+function MessageList({ messages }: { messages: Message[] }) {
+  const parentRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 100,
+  })
+
+  return (
+    <div ref={parentRef} className="h-full overflow-auto">
+      <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => (
+          <div
+            key={virtualItem.key}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualItem.start}px)`,
+            }}
+          >
+            <MessageItem message={messages[virtualItem.index]} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+### 2. 防抖与取消请求
+
+用户快速连续发送时，需要取消上一次未完成的请求：
+
+```tsx
+const { input, handleInputChange, handleSubmit, stop } = useChat({
+  api: '/api/chat',
+})
+
+// 提交时如果上一次还在进行中，先停止
+const onSubmit = (e: React.FormEvent) => {
+  e.preventDefault()
+  if (isLoading) {
+    stop()
+  }
+  handleSubmit(e)
+}
+```
+
+## 部署注意事项
+
+1. **API Key 安全**：千万不要把 `OPENAI_API_KEY` 暴露到客户端。Vercel AI SDK 的设计就是 API Key 只在服务端使用
+2. **Edge Runtime 限制**：如果用了 Node.js 专有 API（如 `fs`），不要设置 `runtime = 'edge'`
+3. **速率限制**：在 API 路由中加入限流，防止滥用：
+
+```typescript
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
+
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, '1 m'), // 每分钟10次
+})
+
+export async function POST(req: Request) {
+  const ip = req.headers.get('x-forwarded-for') ?? 'anonymous'
+  const { success } = await ratelimit.limit(ip)
+
+  if (!success) {
+    return new Response('请求过于频繁', { status: 429 })
+  }
+  // ... 正常逻辑
+}
+```
+
+## 总结
+
+Vercel AI SDK 把 AI 聊天应用的开发门槛降到了很低的水平，但要在生产环境稳定运行，仍然需要关注：
+
+- **上下文管理**：合理截断历史消息，避免 Token 超限
+- **错误处理**：服务端重试 + 客户端兜底，保证用户体验
+- **性能优化**：虚拟滚动、防抖、取消请求
+- **安全防护**：API Key 隔离、速率限制
+
+这套方案我在生产环境跑了半年，日均处理上千次对话，稳定性表现良好。希望这篇实战记录能帮到正在做 AI 应用的前端同学。

@@ -15,6 +15,7 @@ import siteMetadata from '@/data/siteMetadata'
 import { notFound } from 'next/navigation'
 
 const defaultLayout = 'PostLayout'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const layouts: Record<string, React.ComponentType<any>> = {
   PostSimple,
   PostLayout,
