@@ -8,12 +8,16 @@ summary: '从零到一搭建一个支持流式响应的 AI 聊天应用。涵盖
 
 ## 在线体验
 
-下面是一个可交互的流式聊天 Demo，模拟了真实 AI 聊天的流式输出体验。试着点击建议问题或输入消息：
+下面是一个真正使用 **Vercel AI SDK `streamText`** 的可交互 Demo：
+
+- 点击右上角设置按钮，输入你的 OpenAI API Key，即可启用**真实 AI 模式**
+- Demo 会直接在浏览器中调用 `streamText` + `createOpenAI`，通过 `textStream` 异步迭代器逐块获取流式响应
+- 没有 API Key 也能体验，会自动回退到**模拟模式**
 
 <ChatDemo />
 
-> [!NOTE]
-> 这是一个纯前端的模拟 Demo，展示流式聊天的交互体验。接入真实 AI 只需添加 API 路由和 OpenAI API Key，文章下方有完整实现代码。
+> [!IMPORTANT]
+> API Key 仅存储在你浏览器的 localStorage 中，不会发送到任何服务器。获取 Key：[platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 
 ## 前言
 

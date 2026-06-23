@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { streamText } from 'ai'
+import { createOpenAI } from '@ai-sdk/openai'
 
 interface Message {
   id: string
@@ -8,7 +10,7 @@ interface Message {
   content: string
 }
 
-// 预设的 AI 回复知识库（模拟真实 AI 的回答）
+// ─── 模拟模式的知识库（无 API Key 时使用）───
 const KNOWLEDGE_BASE: { keywords: string[]; response: string }[] = [
   {
     keywords: ['vercel', 'ai sdk', '流式', 'streaming'],
@@ -102,7 +104,7 @@ const DEFAULT_RESPONSE = `这是一个 Vercel AI SDK 流式聊天 Demo。
 - "怎么处理错误重试？"
 - "长对话怎么优化性能？"
 
-> 💡 这是一个纯前端的模拟 Demo，展示流式聊天的交互体验。接入真实 AI 只需添加 API 路由和 OpenAI API Key。`
+> 💡 当前为模拟模式。在上方输入 OpenAI API Key 后，将使用真实的 Vercel AI SDK \`streamText\` 调用 AI 模型。`
 
 const SUGGESTIONS = [
   'Vercel AI SDK 怎么实现流式？',
@@ -110,6 +112,9 @@ const SUGGESTIONS = [
   '错误重试怎么处理？',
   '长对话性能怎么优化？',
 ]
+
+const SYSTEM_PROMPT =
+  '你是一个专业的前端开发助手，熟悉 Vercel AI SDK、React、Next.js 等前端技术。回答要简洁准确，代码示例要完整可运行。使用中文回答。'
 
 function findResponse(input: string): string {
   const lower = input.toLowerCase()
@@ -121,7 +126,7 @@ function findResponse(input: string): string {
   return DEFAULT_RESPONSE
 }
 
-// 简易 Markdown 渲染（支持代码块、行内代码、列表、引用）
+// ─── Markdown 渲染 ───
 function renderContent(text: string) {
   const parts = text.split(/(```[\s\S]*?```)/g)
 
@@ -146,7 +151,6 @@ function renderContent(text: string) {
         )
       }
     }
-    // 处理普通文本中的行内代码、粗体、引用等
     return (
       <span key={i}>
         {part.split('\n').map((line, j) => {
@@ -203,42 +207,80 @@ function renderInline(text: string) {
   })
 }
 
+// ─── 主组件 ───
 export default function ChatDemo() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       role: 'assistant',
       content:
-        '你好！我是 AI 聊天 Demo 助手 🤖\n\n我可以回答关于 **Vercel AI SDK** 的问题。试试下面的建议问题，或者直接输入你想了解的内容。',
+        '你好！我是 AI 聊天 Demo 🤖\n\n我可以回答关于 **Vercel AI SDK** 的问题。试试下面的建议问题，或直接输入内容。\n\n> 💡 在下方设置区输入 OpenAI API Key，即可启用真实 AI 模式（使用 Vercel AI SDK streamText）。',
     },
   ])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
+  const [useRealAI, setUseRealAI] = useState(false)
+  const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const streamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortRef = useRef<boolean>(false)
 
-  // 自动滚动到底部
+  // 从 localStorage 读取 API Key
+  useEffect(() => {
+    const savedKey = localStorage.getItem('openai-api-key')
+    if (savedKey) {
+      setApiKey(savedKey)
+      setUseRealAI(true)
+    }
+  }, [])
+
+  // 自动滚动
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
 
-  // 清理定时器
+  // 清理
   useEffect(() => {
     return () => {
       if (streamTimerRef.current) clearTimeout(streamTimerRef.current)
+      abortRef.current = true
     }
   }, [])
 
+  // 保存 API Key
+  const handleSaveKey = useCallback(() => {
+    if (apiKey.trim()) {
+      localStorage.setItem('openai-api-key', apiKey.trim())
+      setUseRealAI(true)
+      setShowSettings(false)
+      setError('')
+    }
+  }, [apiKey])
+
+  // 清除 API Key
+  const handleClearKey = useCallback(() => {
+    localStorage.removeItem('openai-api-key')
+    setApiKey('')
+    setUseRealAI(false)
+  }, [])
+
+  // ─── 模拟流式输出 ───
   const simulateStream = useCallback((fullText: string, messageId: string) => {
     setIsStreaming(true)
+    abortRef.current = false
     let index = 0
     const chars = fullText.split('')
 
     const streamNext = () => {
+      if (abortRef.current) {
+        setIsStreaming(false)
+        return
+      }
       if (index < chars.length) {
-        // 每次追加 1-3 个字符，模拟真实流式速度
         const chunkSize = Math.min(Math.floor(Math.random() * 3) + 1, chars.length - index)
         const chunk = chars.slice(index, index + chunkSize).join('')
         index += chunkSize
@@ -247,7 +289,6 @@ export default function ChatDemo() {
           prev.map((m) => (m.id === messageId ? { ...m, content: m.content + chunk } : m))
         )
 
-        // 代码块内速度稍快
         const delay = chunk.includes('\n') ? 20 : 15 + Math.random() * 25
         streamTimerRef.current = setTimeout(streamNext, delay)
       } else {
@@ -257,6 +298,63 @@ export default function ChatDemo() {
 
     streamNext()
   }, [])
+
+  // ─── 真实 AI 流式输出（使用 Vercel AI SDK streamText）───
+  const realStream = useCallback(
+    async (userText: string, messageId: string, history: Message[]) => {
+      setIsStreaming(true)
+      abortRef.current = false
+      setError('')
+
+      try {
+        // 使用 Vercel AI SDK 的 createOpenAI 创建 provider
+        const openai = createOpenAI({
+          apiKey: apiKey.trim(),
+        })
+
+        // 构建对话消息（保留上下文）
+        const conversationMessages = [
+          ...history.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user' as const, content: userText },
+        ]
+
+        // 调用 streamText —— Vercel AI SDK 的核心函数
+        const result = streamText({
+          model: openai('gpt-4o-mini'),
+          system: SYSTEM_PROMPT,
+          messages: conversationMessages,
+          temperature: 0.7,
+        })
+
+        // 通过 textStream 异步迭代器逐块获取流式文本
+        for await (const delta of result.textStream) {
+          if (abortRef.current) break
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, content: m.content + delta } : m))
+          )
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '未知错误'
+        if (message.includes('401') || message.includes('API key')) {
+          setError('API Key 无效，请检查后重新输入')
+        } else if (message.includes('429')) {
+          setError('请求过于频繁，请稍后再试')
+        } else if (message.includes('fetch')) {
+          setError('网络请求失败，请检查网络连接')
+        } else {
+          setError(`AI 请求失败: ${message}`)
+        }
+        // 移除空的 assistant 消息
+        setMessages((prev) => prev.filter((m) => m.id !== messageId || m.content !== ''))
+      } finally {
+        setIsStreaming(false)
+      }
+    },
+    [apiKey]
+  )
 
   const handleSubmit = useCallback(
     (e?: React.FormEvent, presetInput?: string) => {
@@ -277,19 +375,27 @@ export default function ChatDemo() {
         content: '',
       }
 
+      // 保存当前历史用于上下文（不包含 welcome 消息和当前用户消息）
+      const history = messages.filter((m) => m.id !== 'welcome')
+
       setMessages((prev) => [...prev, userMsg, assistantMsg])
       setInput('')
 
-      // 模拟思考延迟后开始流式输出
-      setTimeout(
-        () => {
-          const response = findResponse(text)
-          simulateStream(response, assistantId)
-        },
-        400 + Math.random() * 600
-      )
+      if (useRealAI && apiKey.trim()) {
+        // 真实模式：使用 Vercel AI SDK streamText
+        realStream(text.trim(), assistantId, history)
+      } else {
+        // 模拟模式
+        setTimeout(
+          () => {
+            const response = findResponse(text)
+            simulateStream(response, assistantId)
+          },
+          400 + Math.random() * 600
+        )
+      }
     },
-    [input, isStreaming, simulateStream]
+    [input, isStreaming, useRealAI, apiKey, realStream, simulateStream, messages]
   )
 
   return (
@@ -315,19 +421,94 @@ export default function ChatDemo() {
           <div>
             <div className="text-sm font-semibold text-white">AI 聊天 Demo</div>
             <div className="flex items-center gap-1 text-xs text-white/80">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-300" />
-              在线 · 模拟流式响应
+              <span
+                className={`inline-block h-1.5 w-1.5 rounded-full ${useRealAI ? 'bg-green-300' : 'bg-yellow-300'}`}
+              />
+              {useRealAI
+                ? '真实模式 · gpt-4o-mini · Vercel AI SDK streamText'
+                : '模拟模式 · 输入 API Key 启用真实 AI'}
             </div>
           </div>
         </div>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="rounded-lg bg-white/20 px-2.5 py-1.5 text-xs text-white transition-colors hover:bg-white/30"
+        >
+          <svg
+            className="inline-block h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+          </svg>
+        </button>
       </div>
 
+      {/* 设置面板 */}
+      {showSettings && (
+        <div className="border-b border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+          <div className="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+            OpenAI API Key（仅存储在浏览器 localStorage，不会发送到服务器）
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+              className="focus:border-primary-400 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none dark:border-gray-600 dark:bg-gray-900"
+            />
+            <button
+              onClick={handleSaveKey}
+              disabled={!apiKey.trim()}
+              className="bg-primary-500 hover:bg-primary-600 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            >
+              保存
+            </button>
+            {useRealAI && (
+              <button
+                onClick={handleClearKey}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+              >
+                清除
+              </button>
+            )}
+          </div>
+          <div className="mt-2 text-xs text-gray-400">
+            获取 API Key：
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary-500 hover:underline"
+            >
+              platform.openai.com/api-keys
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* 错误提示 */}
+      {error && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+          ⚠️ {error}
+        </div>
+      )}
+
       {/* 消息区域 */}
-      <div
-        ref={scrollRef}
-        className="h-[420px] overflow-y-auto bg-gray-50 p-4 dark:bg-gray-900"
-        style={{ scrollbarWidth: 'thin' }}
-      >
+      <div ref={scrollRef} className="h-[420px] overflow-y-auto bg-gray-50 p-4 dark:bg-gray-900">
         <div className="space-y-4">
           {messages.map((msg) => (
             <div
@@ -352,7 +533,6 @@ export default function ChatDemo() {
                 ) : (
                   <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
                 )}
-                {/* 流式光标 */}
                 {msg.role === 'assistant' && isStreaming && msg.content !== '' && (
                   <span className="bg-primary-500 ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle" />
                 )}

@@ -1,0 +1,722 @@
+---
+title: 'Vercel AI SDK 中文官方文档'
+date: '2025-06-22'
+tags: ['AI', 'Vercel AI SDK', '文档']
+draft: false
+summary: 'Vercel AI SDK 完整中文参考文档。涵盖 AI SDK Core（generateText、streamText、Tool Calling、Agent）和 AI SDK UI（useChat、useObject）的 API 详解、代码示例与配置说明。'
+---
+
+> 本文基于 [Vercel AI SDK 官方文档](https://ai-sdk.dev/docs) 翻译整理，内容随官方文档同步更新。
+
+## AI SDK 简介
+
+AI SDK 是一个 TypeScript 工具包，旨在帮助开发者使用 React、Next.js、Vue、Svelte、Node.js 等框架构建 AI 驱动的应用和智能体。
+
+### 为什么使用 AI SDK
+
+将大语言模型（LLM）集成到应用中非常复杂，且高度依赖于你使用的特定模型提供商。AI SDK 统一了不同提供商的 AI 模型集成方式，让开发者专注于构建优秀的 AI 应用，而无需在技术细节上浪费时间。
+
+```typescript
+import { generateText } from 'ai'
+
+const { text } = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'What is love?',
+})
+```
+
+### 两大核心库
+
+AI SDK 包含两个主要库：
+
+- **AI SDK Core**：统一的 API，用于生成文本、结构化对象、工具调用，以及构建智能体。
+- **AI SDK UI**：一组框架无关的 Hook，用于快速构建聊天和生成式 UI。
+
+## Provider 和模型
+
+不同公司（如 OpenAI、Anthropic）通过各自的 API 提供对大语言模型的访问。每个提供商通常有独特的接口方式，增加了切换提供商的难度和供应商锁定风险。
+
+AI SDK Core 通过**语言模型规范**提供了一种标准化的交互方式，抽象了不同提供商之间的差异。这个统一接口让你可以在使用相同 API 的同时轻松切换提供商。
+
+### 支持的提供商
+
+AI SDK 内置了广泛的提供商支持：
+
+| 提供商 | 包名 |
+|--------|------|
+| OpenAI | `@ai-sdk/openai` |
+| Anthropic | `@ai-sdk/anthropic` |
+| Google Generative AI | `@ai-sdk/google` |
+| Google Vertex | `@ai-sdk/google-vertex` |
+| Azure OpenAI | `@ai-sdk/azure` |
+| Amazon Bedrock | `@ai-sdk/amazon-bedrock` |
+| Mistral | `@ai-sdk/mistral` |
+| xAI Grok | `@ai-sdk/xai` |
+| Groq | `@ai-sdk/groq` |
+| DeepSeek | `@ai-sdk/deepseek` |
+| Together.ai | `@ai-sdk/togetherai` |
+| Cohere | `@ai-sdk/cohere` |
+| Fireworks | `@ai-sdk/fireworks` |
+| Cerebras | `@ai-sdk/cerebras` |
+| Perplexity | `@ai-sdk/perplexity` |
+
+社区还提供了 Ollama、OpenRouter、Cloudflare Workers AI 等提供商。任何支持 OpenAI 规范的自托管提供商都可以通过 OpenAI Compatible Provider 使用。
+
+### 模型能力对比
+
+不同模型支持不同的能力：
+
+| 提供商 | 模型 | 图片输入 | 对象生成 | 工具调用 | 工具流式 |
+|--------|------|----------|----------|----------|----------|
+| OpenAI | gpt-4o | ✅ | ✅ | ✅ | ✅ |
+| Anthropic | claude-sonnet-4 | ✅ | ✅ | ✅ | ✅ |
+| Google | gemini-2.5-flash | ✅ | ✅ | ✅ | ✅ |
+| DeepSeek | deepseek-chat | ❌ | ✅ | ✅ | ✅ |
+| Groq | llama-3.3-70b | ❌ | ✅ | ✅ | ✅ |
+
+## 文本生成（generateText）
+
+大语言模型可以根据提示生成文本，提示可以包含指令和需要处理的信息。你可以让模型编写食谱、起草邮件或总结文档。
+
+AI SDK Core 提供了两个函数来生成和流式传输文本：
+
+- `generateText`：为给定提示和模型生成文本
+- `streamText`：从给定提示和模型流式传输文本
+
+### 基本用法
+
+`generateText` 适合非交互式场景（如起草邮件、总结网页）以及使用工具的智能体：
+
+```typescript
+import { generateText } from 'ai'
+
+const { text } = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'Write a vegetarian lasagna recipe for 4 people.',
+})
+```
+
+### 带系统提示的高级用法
+
+```typescript
+import { generateText } from 'ai'
+
+const { text } = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  system: 'You are a professional writer. You write simple, clear, and concise content.',
+  prompt: `Summarize the following article in 3-5 sentences: ${article}`,
+})
+```
+
+### 返回结果
+
+`generateText` 的结果对象包含多个属性：
+
+| 属性 | 说明 |
+|------|------|
+| `result.text` | 生成的文本 |
+| `result.reasoning` | 模型生成的推理过程 |
+| `result.toolCalls` | 最后一步中进行的工具调用 |
+| `result.toolResults` | 最后一步工具调用的结果 |
+| `result.finishReason` | 模型完成生成的原因 |
+| `result.usage` | 最后一步的模型使用量 |
+| `result.totalUsage` | 所有步骤的总使用量 |
+| `result.steps` | 所有步骤的详细信息 |
+| `result.response` | 响应信息，包括响应消息和 body |
+| `result.warnings` | 模型提供商的警告 |
+
+### onFinish 回调
+
+```typescript
+import { generateText } from 'ai'
+
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'Invent a new holiday and describe its traditions.',
+  onFinish({ text, finishReason, usage, response, steps, totalUsage }) {
+    // 你的逻辑，例如保存聊天历史或记录使用量
+    const messages = response.messages
+  },
+})
+```
+
+### 生命周期回调（实验性）
+
+`generateText` 提供了多个实验性生命周期回调，可用于日志、可观测性、调试和自定义遥测：
+
+```typescript
+import { generateText } from 'ai'
+
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'What is the weather in San Francisco?',
+  tools: { /* 你的工具 */ },
+  experimental_onStart({ model, settings, functionId }) {
+    console.log('Generation started', { model, functionId })
+  },
+  experimental_onStepStart({ stepNumber, model, promptMessages }) {
+    console.log(`Step ${stepNumber} starting`, { model: model.modelId })
+  },
+  experimental_onToolCallStart({ toolName, toolCallId, input }) {
+    console.log(`Tool call starting: ${toolName}`, { toolCallId })
+  },
+  experimental_onToolCallFinish({ toolName, durationMs, error }) {
+    console.log(`Tool call finished: ${toolName} (${durationMs}ms)`)
+  },
+  onStepFinish({ stepNumber, finishReason, usage }) {
+    console.log(`Step ${stepNumber} finished`, { finishReason, usage })
+  },
+})
+```
+
+可用的生命周期回调：
+
+- `experimental_onStart`：generateText 操作开始时调用一次
+- `experimental_onStepStart`：每步（LLM 调用）之前调用
+- `experimental_onToolCallStart`：工具 execute 函数运行之前调用
+- `experimental_onToolCallFinish`：工具 execute 函数完成或出错后调用
+- `onStepFinish`：每步完成后调用
+
+## 流式文本生成（streamText）
+
+根据模型和提示，LLM 可能需要长达一分钟才能完成生成响应。对于聊天机器人或实时应用等交互式场景，这种延迟是不可接受的。`streamText` 函数简化了从 LLM 流式传输文本的过程：
+
+```typescript
+import { streamText } from 'ai'
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'Invent a new holiday and describe its traditions.',
+})
+
+// 使用 textStream 作为异步迭代器
+for await (const textPart of result.textStream) {
+  console.log(textPart)
+}
+```
+
+`result.textStream` 既是 `ReadableStream` 又是 `AsyncIterable`。
+
+> `streamText` 会立即开始流式传输并抑制错误以防止服务器崩溃。使用 `onError` 回调来记录错误。
+
+### 流式响应辅助方法
+
+`streamText` 的结果对象包含多个辅助函数，便于与 AI SDK UI 集成：
+
+| 方法 | 说明 |
+|------|------|
+| `result.toUIMessageStreamResponse()` | 创建 UI Message 流式 HTTP 响应（含工具调用等），用于 Next.js App Router API 路由 |
+| `result.pipeUIMessageStreamToResponse()` | 将 UI Message 流增量写入 Node.js 响应对象 |
+| `result.toTextStreamResponse()` | 创建简单的文本流式 HTTP 响应 |
+| `result.pipeTextStreamToResponse()` | 将文本增量写入 Node.js 响应对象 |
+
+> `streamText` 使用背压机制，仅在请求时生成 token。你需要消费流才能使其完成。
+
+### onError 回调
+
+```typescript
+import { streamText } from 'ai'
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'Invent a new holiday and describe its traditions.',
+  onError({ error }) {
+    console.error(error)
+  },
+})
+```
+
+### onChunk 回调
+
+`onChunk` 回调在流的每个块时触发，接收以下块类型：`text`、`reasoning`、`source`、`tool-call`、`tool-input-start`、`tool-input-delta`、`tool-result`、`raw`
+
+```typescript
+import { streamText } from 'ai'
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4.5',
+  prompt: 'Invent a new holiday and describe its traditions.',
+  onChunk({ chunk }) {
+    if (chunk.type === 'text') {
+      console.log(chunk.text)
+    }
+  },
+})
+```
+
+### fullStream 属性
+
+你可以使用 `fullStream` 属性读取包含所有事件的流。这对于实现自定义 UI 或以不同方式处理流非常有用：
+
+```typescript
+import { streamText } from 'ai'
+import { z } from 'zod'
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4.5',
+  tools: {
+    cityAttractions: {
+      inputSchema: z.object({ city: z.string() }),
+      execute: async ({ city }) => ({
+        attractions: ['attraction1', 'attraction2', 'attraction3'],
+      }),
+    },
+  },
+  prompt: 'What are some San Francisco tourist attractions?',
+})
+
+for await (const part of result.fullStream) {
+  switch (part.type) {
+    case 'text-delta':
+      // 处理文本增量
+      break
+    case 'tool-call':
+      // 处理工具调用
+      break
+    case 'tool-result':
+      // 处理工具结果
+      break
+    case 'error':
+      // 处理错误
+      break
+    case 'finish':
+      // 处理完成
+      break
+  }
+}
+```
+
+### 流转换
+
+你可以使用 `experimental_transform` 选项来转换流，用于过滤、修改或平滑文本流：
+
+```typescript
+import { smoothStream, streamText } from 'ai'
+
+const result = streamText({
+  model,
+  prompt,
+  experimental_transform: smoothStream(),
+})
+```
+
+你也可以实现自定义转换：
+
+```typescript
+import { streamText, type TextStreamPart, type ToolSet } from 'ai'
+
+const upperCaseTransform =
+  <TOOLS extends ToolSet>() =>
+  (options: { tools: TOOLS; stopStream: () => void }) =>
+    new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
+      transform(chunk, controller) {
+        controller.enqueue(
+          chunk.type === 'text-delta'
+            ? { ...chunk, text: chunk.text.toUpperCase() }
+            : chunk,
+        )
+      },
+    })
+```
+
+## 工具调用（Tool Calling）
+
+工具是可以被模型调用来执行特定任务的对象。AI SDK Core 工具包含以下核心元素：
+
+- `description`：工具的可选描述，可以影响工具何时被选择
+- `inputSchema`：定义输入参数的 Zod schema 或 JSON schema。schema 被 LLM 消费，也用于验证 LLM 工具调用
+- `execute`：可选的异步函数，用工具调用的输入调用。它产生类型为 `RESULT` 的值
+- `strict`：可选布尔值，在提供商支持时启用严格工具调用
+
+### 基本用法
+
+```typescript
+import { z } from 'zod'
+import { generateText, tool, stepCountIs } from 'ai'
+
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72 + Math.floor(Math.random() * 21) - 10,
+      }),
+    }),
+  },
+  stopWhen: stepCountIs(5),
+  prompt: 'What is the weather in San Francisco?',
+})
+```
+
+### 严格模式
+
+启用后，支持严格工具调用的语言模型提供商将只生成符合你定义的 `inputSchema` 的有效工具调用，提高了工具调用的可靠性：
+
+```typescript
+tool({
+  description: 'Get the weather in a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  strict: true,
+  execute: async ({ location }) => ({
+    // ...
+  }),
+})
+```
+
+### 工具执行审批
+
+默认情况下，带有 `execute` 函数的工具会在模型调用时自动运行。你可以通过设置 `needsApproval` 来要求在执行前审批：
+
+```typescript
+import { tool } from 'ai'
+import { z } from 'zod'
+
+const runCommand = tool({
+  description: 'Run a shell command',
+  inputSchema: z.object({
+    command: z.string().describe('The shell command to execute'),
+  }),
+  needsApproval: true,
+  execute: async ({ command }) => {
+    // 你的命令执行逻辑
+  },
+})
+```
+
+#### 动态审批
+
+你可以根据工具输入做审批决策：
+
+```typescript
+const paymentTool = tool({
+  description: 'Process a payment',
+  inputSchema: z.object({
+    amount: z.number(),
+    recipient: z.string(),
+  }),
+  needsApproval: async ({ amount }) => amount > 1000,
+  execute: async ({ amount, recipient }) => {
+    return await processPayment(amount, recipient)
+  },
+})
+```
+
+## 多步骤调用与 Agent
+
+### 多步骤调用（stopWhen）
+
+使用 `stopWhen` 设置，你可以在 `generateText` 和 `streamText` 中启用多步骤调用。当设置了 `stopWhen` 且模型生成工具调用时，AI SDK 会传入工具结果触发新的生成，直到没有更多工具调用或满足停止条件。
+
+AI SDK 提供了几个内置停止条件：
+
+- `stepCountIs(count)` — 在指定步数后停止（默认：`stepCountIs(20)`）
+- `hasToolCall(toolName)` — 当特定工具被调用时停止
+- `isLoopFinished()` — 从不触发，让循环运行直到自然完成
+
+```typescript
+import { z } from 'zod'
+import { generateText, tool, stepCountIs } from 'ai'
+
+const { text, steps } = await generateText({
+  model: 'anthropic/claude-sonnet-4.5',
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72 + Math.floor(Math.random() * 21) - 10,
+      }),
+    }),
+  },
+  stopWhen: stepCountIs(5),
+  prompt: 'What is the weather in San Francisco?',
+})
+```
+
+### ToolLoopAgent 类
+
+`ToolLoopAgent` 类处理 LLM、工具和循环三个组件，是构建智能体的推荐方式：
+
+```typescript
+import { ToolLoopAgent, tool } from 'ai'
+import { z } from 'zod'
+
+const weatherAgent = new ToolLoopAgent({
+  model: 'anthropic/claude-sonnet-4.5',
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location (in Fahrenheit)',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72 + Math.floor(Math.random() * 21) - 10,
+      }),
+    }),
+    convertFahrenheitToCelsius: tool({
+      description: 'Convert temperature from Fahrenheit to Celsius',
+      inputSchema: z.object({
+        temperature: z.number().describe('Temperature in Fahrenheit'),
+      }),
+      execute: async ({ temperature }) => {
+        const celsius = Math.round((temperature - 32) * (5 / 9))
+        return { celsius }
+      },
+    }),
+  },
+})
+
+const result = await weatherAgent.generate({
+  prompt: 'What is the weather in San Francisco in celsius?',
+})
+
+console.log(result.text)  // 智能体的最终回答
+console.log(result.steps) // 智能体执行的步骤
+```
+
+智能体会自动：
+
+1. 调用 `weather` 工具获取华氏温度
+2. 调用 `convertFahrenheitToCelsius` 进行转换
+3. 生成包含结果的最终文本响应
+
+#### 为什么使用 ToolLoopAgent
+
+- **减少样板代码** — 管理循环和消息数组
+- **提高可复用性** — 定义一次，在整个应用中使用
+- **简化维护** — 单一位置更新智能体配置
+
+## AI SDK UI：useChat Hook
+
+`useChat` Hook 让创建聊天机器人的对话式 UI 变得轻松。它支持从 AI 提供商流式传输聊天消息，管理聊天状态，并在新消息到达时自动更新 UI。
+
+### 核心功能
+
+- **消息流式传输**：所有来自 AI 提供商的消息都实时流式传输到聊天 UI
+- **状态管理**：Hook 管理输入、消息、状态、错误等状态
+- **无缝集成**：轻松将聊天 AI 集成到任何设计或布局中
+
+### 完整示例
+
+**前端页面（app/page.tsx）：**
+
+```tsx
+'use client'
+
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+import { useState } from 'react'
+
+export default function Page() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  })
+  const [input, setInput] = useState('')
+
+  return (
+    <>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role === 'user' ? 'User: ' : 'AI: '}
+          {message.parts.map((part, index) =>
+            part.type === 'text' ? <span key={index}>{part.text}</span> : null,
+          )}
+        </div>
+      ))}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (input.trim()) {
+            sendMessage({ text: input })
+            setInput('')
+          }
+        }}
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={status !== 'ready'}
+          placeholder="Say something..."
+        />
+        <button type="submit" disabled={status !== 'ready'}>
+          Submit
+        </button>
+      </form>
+    </>
+  )
+}
+```
+
+**API 路由（app/api/chat/route.ts）：**
+
+```typescript
+import { convertToModelMessages, streamText, UIMessage } from 'ai'
+
+export const maxDuration = 30
+
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json()
+
+  const result = streamText({
+    model: 'anthropic/claude-sonnet-4.5',
+    system: 'You are a helpful assistant.',
+    messages: await convertToModelMessages(messages),
+  })
+
+  return result.toUIMessageStreamResponse()
+}
+```
+
+### 状态管理
+
+`useChat` 返回的 `status` 有以下可能的值：
+
+| 状态 | 说明 |
+|------|------|
+| `submitted` | 消息已发送到 API，正在等待响应流开始 |
+| `streaming` | 响应正在从 API 流式传输中 |
+| `ready` | 完整响应已接收并处理；可以提交新消息 |
+| `error` | API 请求期间发生错误 |
+
+```tsx
+const { messages, sendMessage, status, stop } = useChat({
+  transport: new DefaultChatTransport({ api: '/api/chat' }),
+})
+
+return (
+  <>
+    {/* 消息列表 */}
+    {(status === 'submitted' || status === 'streaming') && (
+      <div>
+        {status === 'submitted' && <Spinner />}
+        <button type="button" onClick={() => stop()}>Stop</button>
+      </div>
+    )}
+    {/* 输入表单 */}
+  </>
+)
+```
+
+### 错误处理
+
+```tsx
+const { messages, sendMessage, error, regenerate } = useChat({
+  transport: new DefaultChatTransport({ api: '/api/chat' }),
+})
+
+return (
+  <div>
+    {/* 消息列表 */}
+    {error && (
+      <>
+        <div>An error occurred.</div>
+        <button type="button" onClick={() => regenerate()}>Retry</button>
+      </>
+    )}
+    {/* 输入表单 */}
+  </div>
+)
+```
+
+> 建议向用户显示通用错误消息（如"出错了"），避免从服务器泄露信息。
+
+### 消息修改
+
+```tsx
+const { messages, setMessages } = useChat()
+
+const handleDelete = (id) => {
+  setMessages(messages.filter((message) => message.id !== id))
+}
+```
+
+### 取消和重新生成
+
+```tsx
+// 停止流式响应
+const { stop, status } = useChat()
+<button onClick={stop} disabled={!(status === 'streaming' || status === 'submitted')}>
+  Stop
+</button>
+
+// 重新生成最后一条消息
+const { regenerate, status } = useChat()
+<button
+  onClick={regenerate}
+  disabled={!(status === 'ready' || status === 'error')}
+>
+  Regenerate
+</button>
+```
+
+### 节流 UI 更新
+
+默认情况下，`useChat` 每次收到新块时都会触发渲染。你可以使用 `experimental_throttle` 选项节流 UI 更新：
+
+```tsx
+const { messages } = useChat({
+  experimental_throttle: 50, // 节流为 50ms
+})
+```
+
+### 事件回调
+
+```tsx
+import { UIMessage } from 'ai'
+
+const {} = useChat({
+  onFinish: ({ message, messages, isAbort, isDisconnect, isError }) => {
+    // 更新其他 UI 状态
+  },
+  onError: (error) => {
+    console.error('An error occurred:', error)
+  },
+  onData: (data) => {
+    console.log('Received data part from server:', data)
+  },
+})
+```
+
+### 请求配置
+
+#### Hook 级别配置（应用于所有请求）
+
+```tsx
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: '/api/custom-chat',
+    headers: {
+      Authorization: 'your_token',
+    },
+    body: {
+      user_id: '123',
+    },
+    credentials: 'same-origin',
+  }),
+})
+```
+
+## 参考资源
+
+- [AI SDK 官方文档](https://ai-sdk.dev/docs)
+- [AI SDK GitHub 仓库](https://github.com/vercel/ai)
+- [AI SDK 示例集合](https://ai-sdk.dev/docs/foundations/examples)
+- [Chatbot 起步模板](https://vercel.com/templates/next.js/nextjs-ai-chatbot)
+- [llms.txt（完整文档 Markdown 格式）](https://ai-sdk.dev/llms.txt)

@@ -5,6 +5,53 @@ __metadata:
   version: 6
   cacheKey: 8
 
+"@ai-sdk/gateway@npm:3.0.133":
+  version: 3.0.133
+  resolution: "@ai-sdk/gateway@npm:3.0.133"
+  dependencies:
+    "@ai-sdk/provider": 3.0.10
+    "@ai-sdk/provider-utils": 4.0.30
+    "@vercel/oidc": 3.2.0
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 6d98937c376f691c1872157ee30739dd8228b9b141e58994e15269ed1d56e1a38e553219c6a7dc89de6d846d7defa7326583a9a1741004b40cc338257729de8a
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/openai@npm:^3.0.74":
+  version: 3.0.74
+  resolution: "@ai-sdk/openai@npm:3.0.74"
+  dependencies:
+    "@ai-sdk/provider": 3.0.10
+    "@ai-sdk/provider-utils": 4.0.30
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 570560ec68bcb2fa8d80cb824d07089ede4cb8158eb665ba1e4886be2014123fbd4053a654c0e61e97cbbc482c6e933c4e51a27182698e74e46d7653ff244ade
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/provider-utils@npm:4.0.30":
+  version: 4.0.30
+  resolution: "@ai-sdk/provider-utils@npm:4.0.30"
+  dependencies:
+    "@ai-sdk/provider": 3.0.10
+    "@standard-schema/spec": ^1.1.0
+    eventsource-parser: ^3.0.8
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 399621ef72147ffabf2ef57eebd6d333a4fa10e5df2940a61528173d886dfbd3080fe443fe038a28871cf0d4221ae684319ebbe43095a6aa18a6e066444395d1
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/provider@npm:3.0.10":
+  version: 3.0.10
+  resolution: "@ai-sdk/provider@npm:3.0.10"
+  dependencies:
+    json-schema: ^0.4.0
+  checksum: ab4f0f5d45991134fcd541bbaee750894063800c4eeb59524fb16c93cde069c6bb78aeadedbcc5cf70ac8b68ed76dc657185356347f23e88e22a6a18038e5bc8
+  languageName: node
+  linkType: hard
+
 "@algolia/autocomplete-core@npm:1.17.9":
   version: 1.17.9
   resolution: "@algolia/autocomplete-core@npm:1.17.9"
@@ -3332,6 +3379,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@standard-schema/spec@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@standard-schema/spec@npm:1.1.0"
+  checksum: 6245ebef5e698bb04752a22e996a7cc40406a404d9f68a9d4e1a7a10f2422da287247508e7b495a2f32bb38f3d57b4daf2c9ab4bf22d9bca13e20a3dc5ec575e
+  languageName: node
+  linkType: hard
+
 "@svgr/babel-plugin-add-jsx-attribute@npm:8.0.0":
   version: 8.0.0
   resolution: "@svgr/babel-plugin-add-jsx-attribute@npm:8.0.0"
@@ -4159,6 +4213,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@vercel/oidc@npm:3.2.0":
+  version: 3.2.0
+  resolution: "@vercel/oidc@npm:3.2.0"
+  checksum: d005dd58b36bb32a419e6f910fb9a219ccf5aad303bf46ef0e588e22bc0d0c9f95e6584fc73bc1fd1e4aa5e37f3a77071d8a2927454db67eefd54d8659fbd95e
+  languageName: node
+  linkType: hard
+
 "abbrev@npm:^3.0.0":
   version: 3.0.1
   resolution: "abbrev@npm:3.0.1"
@@ -4197,6 +4258,20 @@ __metadata:
   version: 7.1.4
   resolution: "agent-base@npm:7.1.4"
   checksum: 86a7f542af277cfbd77dd61e7df8422f90bac512953709003a1c530171a9d019d072e2400eab2b59f84b49ab9dd237be44315ca663ac73e82b3922d10ea5eafa
+  languageName: node
+  linkType: hard
+
+"ai@npm:^6.0.208":
+  version: 6.0.208
+  resolution: "ai@npm:6.0.208"
+  dependencies:
+    "@ai-sdk/gateway": 3.0.133
+    "@ai-sdk/provider": 3.0.10
+    "@ai-sdk/provider-utils": 4.0.30
+    "@opentelemetry/api": ^1.9.0
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 35fcd38ff00a9af63ed19c962d842cda619dbf4fa0781bb4326ea0b6cd4798855d75c5c28ab39a71b72b59573a9dd8e53c9ca3b722b96747b19eece7aa1db819
   languageName: node
   linkType: hard
 
@@ -6203,6 +6278,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"eventsource-parser@npm:^3.0.8":
+  version: 3.1.0
+  resolution: "eventsource-parser@npm:3.1.0"
+  checksum: 38f6b2d3cd9916fb7902c6489fe981866f5be265c6ce4b890d86c5b549c4fc45fbb89a80a5e83016940fe68c797cd4994d286719bf4d81360cb628b6455618f6
+  languageName: node
+  linkType: hard
+
 "execa@npm:7.2.0":
   version: 7.2.0
   resolution: "execa@npm:7.2.0"
@@ -7792,6 +7874,13 @@ __metadata:
   version: 0.4.1
   resolution: "json-schema-traverse@npm:0.4.1"
   checksum: 7486074d3ba247769fda17d5181b345c9fb7d12e0da98b22d1d71a5db9698d8b4bd900a3ec1a4ffdd60846fc2556274a5c894d0c48795f14cb03aeae7b55260b
+  languageName: node
+  linkType: hard
+
+"json-schema@npm:^0.4.0":
+  version: 0.4.0
+  resolution: "json-schema@npm:0.4.0"
+  checksum: 66389434c3469e698da0df2e7ac5a3281bcff75e797a5c127db7c5b56270e01ae13d9afa3c03344f76e32e81678337a8c912bdbb75101c62e487dc3778461d72
   languageName: node
   linkType: hard
 
@@ -11786,6 +11875,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "tailwind-nextjs-starter-blog@workspace:."
   dependencies:
+    "@ai-sdk/openai": ^3.0.74
     "@eslint/eslintrc": ^3.2.0
     "@eslint/js": ^9.16.0
     "@headlessui/react": 2.2.0
@@ -11799,6 +11889,7 @@ __metadata:
     "@types/react": ^19.0.8
     "@typescript-eslint/eslint-plugin": ^8.12.0
     "@typescript-eslint/parser": ^8.12.0
+    ai: ^6.0.208
     body-scroll-lock: ^4.0.0-beta.0
     contentlayer2: 0.5.5
     cross-env: ^7.0.3
